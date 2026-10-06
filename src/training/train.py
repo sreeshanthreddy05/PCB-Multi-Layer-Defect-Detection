@@ -133,3 +133,70 @@ def tune_hyperparameters(
             best_val_acc, best_params = val_acc, params
 
     return {"best_params": best_params, "best_val_acc": best_val_acc, "results": results}
+
+
+def train_model_fusion(model: Any, train_loader: Any, val_loader: Any, config: Dict[str, Any]) -> Any:
+    """
+    Train the dual-branch FusionModel (optical + CT). Mirrors train_model()
+    but batches yield (optical, ct, label) instead of (image, label).
+
+    Args:
+        model: FusionModel instance from build_fusion_model().
+        train_loader: DataLoader yielding (optical, ct, label) batches.
+        val_loader: DataLoader yielding (optical, ct, label) batches.
+        config: Full project configuration (training section used).
+
+    Returns:
+        Trained model, and history of recorded metrics.
+    """
+    torch.manual_seed(config["data"].get("seed", 42))
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.to(device)
+
+    tcfg = config["training"]
+    optimizer = torch.optim.Adam(
+        model.parameters(), lr=tcfg["learning_rate"], weight_decay=tcfg.get("weight_decay", 0)
+    )
+    criterion = nn.CrossEntropyLoss()
+
+    history = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": []}
+    best_val_acc = 0.0
+
+    for epoch in range(tcfg["epochs"]):
+        model.train()
+        total_loss, correct, total = 0.0, 0, 0
+        for optical, ct, labels in train_loader:
+            optical, ct, labels = optical.to(device), ct.to(device), labels.to(device)
+            optimizer.zero_grad()
+            outputs = model(optical, ct)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item() * labels.size(0)
+            correct += (outputs.argmax(1) == labels).sum().item()
+            total += labels.size(0)
+        train_metrics = {"loss": total_loss / total, "accuracy": correct / total}
+
+        model.eval()
+        val_loss, val_correct, val_total = 0.0, 0, 0
+        with torch.no_grad():
+            for optical, ct, labels in val_loader:
+                optical, ct, labels = optical.to(device), ct.to(device), labels.to(device)
+                outputs = model(optical, ct)
+                loss = criterion(outputs, labels)
+                val_loss += loss.item() * labels.size(0)
+                val_correct += (outputs.argmax(1) == labels).sum().item()
+                val_total += labels.size(0)
+        val_metrics = {"loss": val_loss / val_total, "accuracy": val_correct / val_total}
+
+        history["train_loss"].append(train_metrics["loss"])
+        history["train_acc"].append(train_metrics["accuracy"])
+        history["val_loss"].append(val_metrics["loss"])
+        history["val_acc"].append(val_metrics["accuracy"])
+
+        if val_metrics["accuracy"] > best_val_acc:
+            best_val_acc = val_metrics["accuracy"]
+            ckpt_dir = config.get("model", {}).get("checkpoint_dir", "models")
+            save_model(model, f"{ckpt_dir}/best_fusion.pt", metadata={"epoch": epoch, **val_metrics})
+
+    return model, history
