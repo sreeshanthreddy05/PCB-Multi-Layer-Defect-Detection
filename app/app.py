@@ -25,7 +25,7 @@ import streamlit as st
 
 from src.models.model_loader import load_model
 from src.data.preprocessing import preprocess_image
-from src.inference.predict import predict, _to_tensor
+from src.inference.predict import predict, predict_fusion, _to_tensor
 from src.models.detector import build_localizer, localize_defect
 from src.visualization.visualize import visualize_prediction
 
@@ -106,6 +106,7 @@ def main() -> None:
     class_names = config.get("model", {}).get("class_names", ["PASS", "DEFECT"])
 
     uploaded = st.file_uploader("Upload PCB image", type=["png", "jpg", "jpeg"])
+    ct_uploaded = st.file_uploader("Upload CT scan (optional)", type=["png", "jpg", "jpeg"])
     if uploaded is None:
         return
 
@@ -114,11 +115,23 @@ def main() -> None:
     image = np.array(Image.open(uploaded).convert("RGB"))
     st.image(image, caption="Original image")
 
-    model = load_app_model(config)
-    out = run_inference_pipeline(image, model, config)
+    icfg = config["image"]
 
-    st.pyplot(out["figure"])
-    st.text(format_report(out["prediction"], class_names, config["model"]["name"]))
+    if ct_uploaded is not None:
+        from src.models.classifier import build_fusion_model
+        ct_image = np.array(Image.open(ct_uploaded).convert("L"))
+        processed_opt = preprocess_image(image, (icfg["width"], icfg["height"]))
+        processed_ct = preprocess_image(ct_image, (icfg["width"], icfg["height"]))
+        model = build_fusion_model(config["model"]["num_classes"], config["model"]["name"], pretrained=False)
+        prediction = predict_fusion(processed_opt, processed_ct, model)
+        fig = visualize_prediction(image, prediction)
+    else:
+        model = load_app_model(config)
+        out = run_inference_pipeline(image, model, config)
+        prediction, fig = out["prediction"], out["figure"]
+
+    st.pyplot(fig)
+    st.text(format_report(prediction, class_names, config["model"]["name"]))
 
 
 if __name__ == "__main__":
