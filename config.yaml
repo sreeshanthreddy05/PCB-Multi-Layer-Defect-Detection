@@ -1,44 +1,48 @@
+# PCB Defect Detection System Configuration
+
 image:
-  width: 224
-  height: 224
+  width: 640
+  height: 640
   channels: 3
 
 data:
-  raw_dir: "data/raw"
-  processed_dir: "data/processed"
+  yaml_path: "data/pcb_defect.yaml"
+  raw_dir: "data/raw/pcb-defect-dataset"
   splits_dir: "data/splits"
-  train_split: 0.70
-  validation_split: 0.15
-  test_split: 0.15
   seed: 42
 
-augmentation:
-  horizontal_flip: true
-  vertical_flip: true
-  rotation_degrees: 15
-  brightness: 0.2
-  contrast: 0.2
+model:
+  architecture: "yolo11n"
+  weights: "yolo11n.pt"
+  checkpoint_dir: "runs/pcb_defect/baseline/weights"
+  best_checkpoint: "runs/pcb_defect/baseline/weights/best.pt"
+  num_classes: 6
+  class_names:
+    0: "mouse_bite"
+    1: "spur"
+    2: "missing_hole"
+    3: "short"
+    4: "open_circuit"
+    5: "spurious_copper"
 
 training:
-  batch_size: 32
-  epochs: 20
-  learning_rate: 0.001
-  weight_decay: 0.0001
-  optimizer: "adam"
-  scheduler: "cosine"
-  early_stopping_patience: 5
+  batch_size: 16
+  epochs: 15
+  imgsz: 640
+  patience: 5
+  seed: 42
+  device: "0"
+  workers: 0
+  project: "runs/pcb_defect"
+  name: "baseline"
 
-model:
-  name: "efficientnet_b0"
-  pretrained: true
-  num_classes: 6
-  checkpoint_dir: "models"
-
-localization:
-  method: "gradcam"
+inference:
+  confidence_threshold: 0.25
+  iou_threshold: 0.45
 
 evaluation:
-  metrics: ["accuracy", "precision", "recall", "f1", "confusion_matrix"]
+  metrics: ["precision", "recall", "mAP50", "mAP50_95", "latency"]
+  report_dir: "outputs/reports"
 
 logging:
   level: "INFO"

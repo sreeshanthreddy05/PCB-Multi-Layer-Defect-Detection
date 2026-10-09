@@ -53,22 +53,50 @@ def build_localizer(model: Any, method: str = "gradcam") -> Any:
         A localizer object exposing a method to generate defect
         region heatmaps/boxes for a given image.
     """
+    if method == "bbox":
+        return "bbox"
     if method != "gradcam":
         raise NotImplementedError(f"Localization method '{method}' not supported")
     return _GradCAM(model, _last_conv(model))
 
 
-def localize_defect(localizer: Any, image: Any, predicted_class: int) -> Dict[str, Any]:
+def get_ground_truth_boxes(dataset: Any, image_path: str) -> list:
+    """
+    Look up ground-truth defect boxes for an image, from the
+    (image_path, class_name, bbox) samples returned by
+    src.data.dataset.load_dataset() for the VOC-XML PCB dataset.
+
+    Args:
+        dataset: Full sample list from load_dataset().
+        image_path: Path of the image to look up.
+
+    Returns:
+        List of (class_name, bbox) tuples for that image.
+    """
+    return [(c, b) for p, c, b in dataset if p == image_path]
+
+
+def localize_defect(localizer: Any, image: Any, predicted_class: int, gt_boxes: list = None) -> Dict[str, Any]:
     """
     Generate a defect localization result for a single image.
+
+    Per Section 11: when ground-truth annotations are available
+    (method="bbox"), use those directly rather than an explainability
+    heatmap. Grad-CAM remains the fallback when no annotations exist.
 
     Args:
         localizer: Object returned by build_localizer().
         image: Preprocessed input image.
         predicted_class: Class index predicted by the classifier.
+        gt_boxes: Ground-truth (class_name, bbox) list from
+            get_ground_truth_boxes(), required when localizer == "bbox".
 
     Returns:
-        Dictionary containing e.g. {"heatmap": ..., "bbox": ...}
+        Dictionary containing e.g. {"heatmap": ...} or {"bbox": ..., "all_boxes": ...}
         depending on the method used.
     """
+    if localizer == "bbox":
+        if not gt_boxes:
+            raise ValueError("bbox localization requires gt_boxes")
+        return {"bbox": gt_boxes[0][1], "all_boxes": gt_boxes}
     return {"heatmap": localizer.generate(image, predicted_class)}

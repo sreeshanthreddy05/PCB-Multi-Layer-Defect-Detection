@@ -4,11 +4,11 @@ opencv-python>=4.8
 Pillow>=10.0
 pyyaml>=6.0
 
-# ML / DL
+# ML / DL / Object Detection
 torch>=2.1
 torchvision>=0.16
 scikit-learn>=1.3
-grad-cam>=1.4
+ultralytics>=8.4.0
 
 # Visualization
 matplotlib>=3.7
@@ -17,6 +17,6 @@ seaborn>=0.12
 # UI
 streamlit>=1.28
 
-# Utilities
+# Utilities & Testing
 tqdm>=4.66
 pytest>=7.4
