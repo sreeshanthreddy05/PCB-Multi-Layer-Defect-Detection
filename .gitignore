@@ -5,7 +5,9 @@ venv/
 env/
 .venv/
 .idea/
-data/
+data/processed
+data/raw
+data/splits
 node_modules/
 src/visualization/*.png
 runs/
